@@ -1,0 +1,62 @@
+# Digital Boutique staff portal - Roadmap
+
+This document records work that is requested but not yet built, and decisions that are settled. It exists so the direction is not lost. For what the portal does today, see the [admin user guide](admin-user-guide.md).
+
+## Built, pending credentials
+
+These features are implemented and only need their credentials to go live. The setup steps are in the [setup and handover guide](setup.md).
+
+- **Jira learning-issue integration.** Staff carry a Jira learning issue, and assigned training can be pushed to Jira as a sub-task. Inactive until `JIRA_BASE_URL`, `JIRA_USER_EMAIL` and `JIRA_API_TOKEN` are set. The Jira Cloud site is `dbhq.atlassian.net`.
+- **Google Workspace directory sync.** The **Sync from Google** button imports active staff through the Admin SDK. Inactive until a service account with domain-wide delegation is configured.
+
+## Settled decisions
+
+### Hosting - Laravel Cloud
+
+Previously recorded as open with a preference for Render. The portal runs on **Laravel Cloud**, and a script exists to import a database dump from it. Render is no longer under consideration.
+
+### Sign-in - Google SSO only
+
+Admin panel login is restricted to Google SSO. Password accounts remain possible only when created deliberately by an administrator, and they skip the `AllowedDomain` check.
+
+## Planned - DBWorks client workspace
+
+A larger piece of direction now sits on top of this application: a **client workspace** where each client is a project, bringing that client's Jira board and Slack conversations onto one page, and eventually attributing time to them. The full specification lives in the `priborproperty/workspace` repository (`docs/prd-client-workspace.md`); this section records only what it means for this codebase.
+
+**Organising principle.** Everything resolves to one of three buckets: client work, DB work, personal. Anything unresolved stays visible in an Unassigned lane rather than being guessed.
+
+**First slice (read-only).** For a single client (ETB): render that client's Jira board as status columns, open an issue to read its detail and comments, and show the client's mapped Slack channels alongside. No writes, no DMs, no timers.
+
+### What this codebase already gives it
+
+- Google SSO, Filament Shield RBAC, and per-model policies - reused as-is.
+- `PortalSettings` (settings table with `config/people.php` fallback) - the intended home for the client, channel and domain mapping tables.
+- The `Contracts/` + `Services/` null-implementation idiom - Slack will follow it exactly, so the workspace can be built and merged before a Slack app exists.
+- Google Workspace directory sync - already the staff directory the workspace needs.
+
+### What it needs from this codebase
+
+- **Widen `JiraClient`.** It currently exposes only `createLearningSubtask()` and `issueUrl()`. The workspace needs board and issue search, issue detail with comments, and later worklogs. Time attribution in Jira runs through **Tempo accounts**, exposed on issues as `customfield_10030` (`Account`, carrying `customer` and `category`), not through Jira projects - a client such as Novuna spans roughly sixty `PBF*` projects under a single account.
+- **A `SlackClient` contract** with `HttpSlackClient` and `NullSlackClient`, plus config in `config/services.php`. Read-only scopes for the first slice: `channels:read`, `channels:history`, `users:read`.
+- **Client and mapping models** - client, channel-to-client mapping, domain-to-client mapping, with a dry-run tester so routing can be proven before ingestion exists.
+
+## Open decisions
+
+### Workspace UI - Filament pages or a separate front-end
+
+Filament 5 is an admin-CRUD framework; a Jira board and a message feed are not CRUD. Either build custom Filament Pages (Livewire/Blade) inside this app, inheriting auth, RBAC and navigation but working against the grain, or build a separate front-end against a Laravel API with a free hand on UI but duplicated auth and RBAC. Current recommendation is **custom Filament Pages**, because the first slice is read-only panels and the RBAC reuse outweighs UI freedom at this stage.
+
+### Client data and developer access
+
+The portal holds no client communications today. Once Slack messages and Jira issues are stored, anyone with database access can read client conversations - the same concern that applies to staff data. A rule is needed before Slack ingestion lands: developers work against synthetic or seeded client data, with production credentials held separately.
+
+### Time attribution beyond one user
+
+Time tracking is intended to reach the whole team eventually, reconciled into reviews. The stated principle is that if someone's output is not in question, their time is not scrutinised. Team-wide tracking needs a transparency note - what is collected and who sees it - before it ships beyond a single user.
+
+## Out of scope
+
+These items were raised but belong to other projects. They are recorded here so they are not confused with portal scope.
+
+- Voice-to-Jira default issue type. This concerns a separate voice-prompt tool, not this portal.
+- Slide7 client-portal reporting. This is handled elsewhere and was described as experimental.
