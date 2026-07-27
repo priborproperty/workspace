@@ -1,8 +1,10 @@
-# PRD — DBWorks Client Workspace (working draft, v5)
+# PRD — DBWorks Client Workspace (working draft, v6)
 
-**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v5
+**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v6
 **One-liner:** A workspace at `workspace.digitalboutique.co.uk` where each **client is a Project**. Opening a client (e.g. **ETB**) shows that client's **Jira board + issues** next to its **Slack channels**. Everything that happens rolls up to a single top-down question: **is this client work, DB work, or personal?** — which is also what makes time triage possible later.
 
+> **v6 changes:** Jira verified directly against `dbhq.atlassian.net` via the now-live Atlassian connector — 137 projects, clients span many projects each, existing `Write Off` category, DB-internal projects already present (§7.4). Client name corrected to **Novuna**. Jira access removed from the blocking list.
+>
 > **v5 changes:** Confirms Jira Cloud, Google Workspace as the staff source of truth, and the private spec repo. Adds **directory sync** (§7) — pull staff from Google Workspace, users + public channels from Slack — and a **mapping page** where channels and external domains get bucketed. Notes that Jira maps **client → account** (ETB single, Navuna multi-space). Replaces open questions with an **outstanding-items ledger** (§9).
 >
 > **Repo caveat:** Claude cannot yet read the GitLab repo (`digitalboutique/internalprojects/people`). Items tagged _[verify]_ need checking against code once the push-mirror in §12 is live.
@@ -14,7 +16,7 @@
 Every channel, thread, contact, and (later) hour resolves to exactly one bucket:
 
 ```
-1. CLIENT WORK   → ETB, Navuna, …            (billable, per-client)
+1. CLIENT WORK   → ETB, Novuna, …            (billable, per-client)
 2. DB WORK       → Digital Boutique internal (incl. private/"special ops")
 3. PERSONAL      → chit-chat, non-work
 ```
@@ -57,7 +59,7 @@ A client's reality is split across Jira and Slack, and there's no single "ETB" s
 Deliberately the smaller bite. Ship it, get traction, then iterate.
 
 ### 4.1 Scope
-- **Project switcher:** ETB, Navuna, Digital Boutique, Personal.
+- **Project switcher:** ETB, Novuna, Digital Boutique, Personal.
 - **Jira panel (read-only):** the ETB board rendered as status columns with issue cards; click a card → issue detail (summary, description, status, assignee, comments). _[verify: Cloud vs Server/DC; which board = ETB]_
 - **Slack panel (channels only):** ETB's mapped channels, recent threads readable inline.
 - **Channel→client mapping UI** + a **dry-run tester** (paste a channel name → shows which bucket/client it lands in).
@@ -119,12 +121,33 @@ One screen where the pulled directories get bucketed:
 - Unmapped items sit in **Unassigned** — visible, never guessed.
 - Includes the **dry-run tester** (paste a channel or address → shows where it lands).
 
-### 7.4 Jira accounts & categories
-Jira Cloud has **accounts** and **account categories**, and that's where time ultimately logs:
-- **ETB** = one account, all its time logs there.
-- **Navuna** = an account that spans **multiple spaces/projects**.
-- So the client → Jira mapping is **client → account**, not simply client → project. A client may have several Jira projects/spaces feeding one account.
-- **Action:** experiment with the real account/category structure when we reach the time-logging slice, rather than guessing the shape now.
+### 7.4 Jira — verified against the live site
+
+**Confirmed by direct inspection of `dbhq.atlassian.net` (cloudId `3fd3e2ba-24f6-47b3-924d-e7a71e121373`), 2026-07-27. Claude has read + write Jira scopes via the Atlassian connector — no API token needed.**
+
+**Scale: 137 projects.** This is the single most important finding for the design.
+
+**Clients span many projects each** — the client → project relationship is emphatically one-to-many:
+
+| Client | Jira projects (sample) |
+|---|---|
+| **ETB** | `ETB`, `ETBPCF` (ETB - PCF), `ETBBTO` *(archived)* |
+| **Novuna** | `RAID` (Novuna Raid Log) — *note the spelling: **Novuna**, not "Navuna"* |
+| **PBF** | ~60 projects (`PBFAX`, `PBFCC`, `PBFDMT`, `PBFST`, …) — by far the largest |
+| **Slide7** | `SPORTS`, `S7`, `S7BAS`, `S7GFBAS`, `S7RM`, `SLD7`, `SSUB`, `LCFC*` |
+| **Stoneridge** | `SR`, `SRM2` |
+| **Trade Radiators** | `TR`, `TRD`, `TRDES` |
+| **Goodfellow** | `GDF`, `GFS` |
+
+**Design consequences:**
+- The client switcher **cannot be a Jira project picker.** With PBF at ~60 projects, a client is a *set* of Jira projects. Confirms the **client → account** model.
+- We need a **client → [Jira projects]** mapping table, sitting alongside the channel and domain maps on the mapping page (§7.3). Prefix conventions (`PBF*`, `ETB*`, `S7*`) make this mostly mechanical, with manual overrides for the ones that don't fit (`RAID`, `SPORTS`, `LCFC*`).
+- **Archived projects** are marked by a `zarchive ` name prefix — the mapping should exclude them from active views by default.
+- **Project categories already exist** and are a real signal: `Productivity`, and notably **`Write Off` — "Unproductive time worked on client account"**. That is an existing time-tracking concept in the org and should inform the time slice rather than being reinvented.
+- **DB internal work already has Jira projects** — `DBADMIN`, `DBBUSINESS`, `DBHD`, `DBIMPROVE`, `DDSSO`, `CTT`, `PO` (Project/Staff Oversight). These map to bucket 2 (**DB WORK**), giving the three-bucket hierarchy a real Jira backing.
+- `DBOOO` (DB Out of Office) and `DBSTAFF` exist — relevant when the parked People/Who's Off work resumes.
+
+**Still to verify:** whether Jira *accounts* (Tempo-style, for time logging) exist separately from projects/categories, and which board within `ETB` is the active one for Slice 1.
 
 ---
 
@@ -153,9 +176,10 @@ Running list of what's still needed. **Not questions to answer now** — the led
 | # | Item | Blocks |
 |---|---|---|
 | 1 | **GitLab access to the Laravel app** — via push-mirror to a private GitHub repo (see §12) | Everything code-related; resolves all `[verify]` tags |
-| 2 | **ETB Jira board link** + **Jira Cloud API token** | Slice 1 Jira panel |
-| 3 | **Slack app** with narrow scopes (`channels:read`, `channels:history`, `users:read`) | Slice 1 Slack panel |
-| 4 | Google Workspace **Directory API** access (service account or admin consent) | Staff sync (§7.1) |
+| 2 | **Slack app** with narrow scopes (`channels:read`, `channels:history`, `users:read`) | Slice 1 Slack panel |
+| 3 | Google Workspace **Directory API** access (service account or admin consent) | Staff sync (§7.1) |
+
+**Resolved:** ~~Jira access~~ — the **Atlassian connector is live** with read + write scopes on `dbhq.atlassian.net`. No API token needed. Jira structure verified directly (§7.4).
 
 ### To resolve during build (not blocking now)
 - **Jira account/category structure** — confirm real shape for ETB (single) vs Navuna (multi-space); experiment when we reach time logging.
