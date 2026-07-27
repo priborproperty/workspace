@@ -1,6 +1,6 @@
 # PRD — DBWorks Client Workspace (working draft, v4)
 
-**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27
+**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v5
 **One-liner:** A workspace at `workspace.digitalboutique.co.uk` where each **client is a Project**. Opening a client (e.g. **ETB**) shows that client's **Jira board + issues** next to its **Slack channels**. Everything that happens rolls up to a single top-down question: **is this client work, DB work, or personal?** — which is also what makes time triage possible later.
 
 > **v4 changes:** Slice 1 trimmed to the smaller bite — **Jira read-only + Slack channels**. DMs deferred. Adds the **three-bucket hierarchy**, the **comms convention** (channels/threads over DMs), **partner** handling, and the **time-triage** end goal with its trust guardrail.
@@ -39,6 +39,9 @@ A client's reality is split across Jira and Slack, and there's no single "ETB" s
 | Decision | Choice |
 |---|---|
 | Foundation | Extend existing Laravel app; reuse Google SSO _[verify]_ |
+| **Jira** | **Jira Cloud** (confirmed) |
+| Identity source of truth | **Google Workspace** — a Google Workspace account *is* what makes you staff |
+| Spec/app repo | `priborproperty/workspace` — **private, Alistair-only** (confirmed) |
 | **Slice 1** | **Jira read-only (board + issue detail) + Slack channels for one client (ETB)** |
 | Jira depth v1 | **Read-only.** Comment / transition / assign is Slice 2 |
 | Slack v1 | **Channels only.** DMs deferred to a later slice |
@@ -95,7 +98,37 @@ Consequence: person-based routing only auto-fires for **external client contacts
 
 ---
 
-## 7. The end goal — time triage (direction, not Slice 1)
+## 7. Directory sync & the mapping page
+
+Rather than hand-maintaining lists, the workspace **pulls its directories** from the systems that already hold the truth, then gives one screen to map them.
+
+### 7.1 Staff sync — from Google Workspace
+- Pull **all staff from Google Workspace** (Directory API) on a schedule.
+- **A Google Workspace account is what makes you staff.** Everyone here has one — no Google account would be highly unusual, and that path can be handled later rather than designed for now.
+- This gives the internal-person list for free, and dovetails with the existing Google SSO.
+
+### 7.2 Slack sync
+- Pull **users** and **public channels** from Slack on a schedule.
+- **Public channels are fine** to enumerate, and public channels can be added to the workspace freely — low-friction, no per-channel approval dance.
+- Private channels are a later decision (§9 backlog): membership rules need modelling first.
+
+### 7.3 The mapping page
+One screen where the pulled directories get bucketed:
+- List **all Slack channels** → map each to a **client / DB work / personal** bucket.
+- List **external domains** seen in traffic → map to client, or flag as **partner**.
+- Unmapped items sit in **Unassigned** — visible, never guessed.
+- Includes the **dry-run tester** (paste a channel or address → shows where it lands).
+
+### 7.4 Jira accounts & categories
+Jira Cloud has **accounts** and **account categories**, and that's where time ultimately logs:
+- **ETB** = one account, all its time logs there.
+- **Navuna** = an account that spans **multiple spaces/projects**.
+- So the client → Jira mapping is **client → account**, not simply client → project. A client may have several Jira projects/spaces feeding one account.
+- **Action:** experiment with the real account/category structure when we reach the time-logging slice, rather than guessing the shape now.
+
+---
+
+## 8. The end goal — time triage (direction, not Slice 1)
 
 Once comms are bucketed, time can be too: **how much time went to client work vs DB work vs personal.** Purpose is *reconciliation and fairness*, not surveillance.
 
@@ -112,18 +145,30 @@ Sequencing: Alistair-only timer → Jira worklogs first. Team-wide only after th
 
 ---
 
-## 8. Open questions
+## 9. Outstanding items — breadcrumbs
 
-1. **Jira** — Cloud or Server/DC? Which board/project is ETB? Does one issue-key prefix map cleanly to one client?
-2. **Slack** — one workspace or several? Bot token sufficient for channel reading in Slice 1? (DM/user-token questions deferred with DMs.)
-3. **Client + partner domain map** — who maintains it? Does it live in the app, or come from HubSpot/Apollo?
-4. **Private channels** — should DB-private channels surface in the workspace at all in v1, or stay Slack-only until membership rules are modelled?
-5. **Stack/SSO** _[verify]_ — Laravel version, Livewire/Inertia, existing auth wiring.
-6. **Repo home** — PRD and app code should live in a DB workspace repo, not `barra-woodview` (see §11).
+Running list of what's still needed. **Not questions to answer now** — the ledger so nothing gets lost.
+
+### Owed by Alistair (blocking, in priority order)
+| # | Item | Blocks |
+|---|---|---|
+| 1 | **GitLab access to the Laravel app** — via push-mirror to a private GitHub repo (see §12) | Everything code-related; resolves all `[verify]` tags |
+| 2 | **ETB Jira board link** + **Jira Cloud API token** | Slice 1 Jira panel |
+| 3 | **Slack app** with narrow scopes (`channels:read`, `channels:history`, `users:read`) | Slice 1 Slack panel |
+| 4 | Google Workspace **Directory API** access (service account or admin consent) | Staff sync (§7.1) |
+
+### To resolve during build (not blocking now)
+- **Jira account/category structure** — confirm real shape for ETB (single) vs Navuna (multi-space); experiment when we reach time logging.
+- **Client + partner domain map** — where it's maintained: in-app table, or sourced from HubSpot/Apollo.
+- **Private channels** — surface in the workspace, or stay Slack-only until membership rules are modelled.
+- **Slack workspace count** — one or several.
+- **Laravel stack specifics** _[verify]_ — version, Livewire/Inertia, existing auth wiring.
+- **Non-Google staff edge case** — deliberately deferred; handle later if it ever occurs.
+- **Client-data sandbox rule** — recommended as a Slice 1 constraint (see §11 risks).
 
 ---
 
-## 9. Backlog (parked)
+## 10. Backlog (parked)
 - Jira writes (comment / transition / assign) — **Slice 2 candidate**
 - Slack DMs + `ETB-Alistair-Jitish` naming + AI thread segmentation
 - Email (Gmail) ingestion into the client feed
@@ -133,21 +178,38 @@ Sequencing: Alistair-only timer → Jira worklogs first. Team-wide only after th
 
 ---
 
-## 10. Risks
+## 11. Risks
+- **Client comms in the database are the same problem as HR data.** Once ETB's Slack and Jira content lands in a table, any developer with DB access can read client conversations. **Recommendation: apply the sandbox rule from day one** — devs build against synthetic/seeded client data; production credentials stay with Alistair. Far cheaper now than retrofitted later.
 - **Channel discipline is a people problem, not a code problem** — the design leans on it; the nudge and Unassigned lane are the mitigations.
 - **Partner routing** is the weakest link (no domain signal) — depends entirely on channel mapping.
-- **Time tracking can read as surveillance** — the §7 guardrail must be stated to the team, not just implied.
+- **Time tracking can read as surveillance** — the §8 guardrail must be stated to the team, not just implied.
 - **Board fidelity** — v1 renders status columns, not full Jira board parity (swimlanes, filters).
 
 ---
 
-## 11. Repo / tooling note
-- **This repo (`priborproperty/workspace`) is the home** for DBWorks specs and, later, the workspace application code. (Earlier drafts lived in `priborproperty/barra-woodview` — the Barra cottage site — where every push triggered an unrelated Cloudflare Pages rebuild. That PR should be closed unmerged.)
-- **Do not connect this repo to the cottage site's Cloudflare Pages project.** If preview deploys are wanted later, wire them deliberately to a DBWorks target.
-- The People/Laravel app lives in **GitLab** (`digitalboutique/internalprojects/people`). There is no GitLab connector available to Claude in this environment; options are mirroring to GitHub, or running Claude Code locally against a GitLab clone.
-- **Compartmentalisation:** specs and workspace code here; the People/HR app stays separate in GitLab with its own sandbox data rules. Credentials (Jira, Slack, Google) never enter either repo.
+## 12. Repo / tooling
+
+### Repos (kept deliberately separate)
+| Repo | Contents | Access |
+|---|---|---|
+| `priborproperty/workspace` (GitHub) | DBWorks specs + workspace app code | Private, Alistair-only |
+| `digitalboutique/internalprojects/people` (GitLab) | Laravel People/HR app | DB devs, sandboxed |
+| `priborproperty/barra-woodview` (GitHub) | Unrelated personal site | — |
+
+- **Do not connect `workspace` to the cottage site's Cloudflare Pages project.** Wire preview deploys deliberately to a DBWorks target if wanted later.
+- Credentials (Jira, Slack, Google) never enter any repo — environment config only.
+
+### Getting Claude access to the GitLab app
+**There is no GitLab connector in the Claude connector directory**, so there's no OAuth "authorize" flow. The chosen route is a **GitLab push mirror to a private GitHub repo**, which is one-time setup and then automatic:
+
+1. Create a **private** GitHub repo (e.g. `priborproperty/people`).
+2. Create a GitHub Personal Access Token (classic, `repo` scope) — entered **into GitLab**, never into a chat transcript.
+3. In GitLab: **Settings → Repository → Mirroring repositories** → direction **Push** → URL `https://github.com/priborproperty/people.git` → username + token → **Mirror repository**.
+4. Every GitLab push then syncs to GitHub, where Claude can read it via `add_repo`.
+
+*Alternatives considered:* running Claude Code locally against a GitLab clone (works, but no remote-session access); pasting a GitLab read token into chat (rejected — puts a credential in the transcript).
 
 ---
 
-## 12. Success signal (Slice 1)
+## 13. Success signal (Slice 1)
 Alistair opens ETB in the workspace instead of switching between Jira and Slack: the live board is there, issues open with their comments, and the ETB channels sit beside them — small enough to have shipped, useful enough to keep using.
