@@ -1,8 +1,10 @@
-# PRD — DBWorks Client Workspace (working draft, v6)
+# PRD — DBWorks Client Workspace (working draft, v7)
 
-**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v6
+**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v7
 **One-liner:** A workspace at `workspace.digitalboutique.co.uk` where each **client is a Project**. Opening a client (e.g. **ETB**) shows that client's **Jira board + issues** next to its **Slack channels**. Everything that happens rolls up to a single top-down question: **is this client work, DB work, or personal?** — which is also what makes time triage possible later.
 
+> **v7 changes:** **Tempo Accounts found and verified** (§7.5) — `customfield_10030` exposes Account → {customer, category}. PBF → customer **Novuna**; account `Category` (Billable / Write off / Admin / R&D) already *is* the three-bucket hierarchy. Live counter-examples prove **project ≠ client**, so the client switcher must be driven by Account/Customer, not Jira project.
+>
 > **v6 changes:** Jira verified directly against `dbhq.atlassian.net` via the now-live Atlassian connector — 137 projects, clients span many projects each, existing `Write Off` category, DB-internal projects already present (§7.4). Client name corrected to **Novuna**. Jira access removed from the blocking list.
 >
 > **v5 changes:** Confirms Jira Cloud, Google Workspace as the staff source of truth, and the private spec repo. Adds **directory sync** (§7) — pull staff from Google Workspace, users + public channels from Slack — and a **mapping page** where channels and external domains get bucketed. Notes that Jira maps **client → account** (ETB single, Navuna multi-space). Replaces open questions with an **outstanding-items ledger** (§9).
@@ -47,7 +49,7 @@ A client's reality is split across Jira and Slack, and there's no single "ETB" s
 | **Slice 1** | **Jira read-only (board + issue detail) + Slack channels for one client (ETB)** |
 | Jira depth v1 | **Read-only.** Comment / transition / assign is Slice 2 |
 | Slack v1 | **Channels only.** DMs deferred to a later slice |
-| Routing pass 1 | Channel → client (explicit map); external contact → client (by **email domain**) |
+| Routing pass 1 | Jira: **issue → Tempo Account → Customer** (verified). Slack: channel → client (explicit map). Email: external contact → client (by **email domain**) |
 | Partners | Corfinity, Akuvu etc. are **partners**, not clients — routed by **channel**, never by domain |
 | Comms convention | Channels/threads first; DMs reserved for genuinely personal |
 | Parked | People / Who's Off / Drive segregation / RBAC → §9 |
@@ -139,15 +141,67 @@ One screen where the pulled directories get bucketed:
 | **Trade Radiators** | `TR`, `TRD`, `TRDES` |
 | **Goodfellow** | `GDF`, `GFS` |
 
-**Design consequences:**
-- The client switcher **cannot be a Jira project picker.** With PBF at ~60 projects, a client is a *set* of Jira projects. Confirms the **client → account** model.
-- We need a **client → [Jira projects]** mapping table, sitting alongside the channel and domain maps on the mapping page (§7.3). Prefix conventions (`PBF*`, `ETB*`, `S7*`) make this mostly mechanical, with manual overrides for the ones that don't fit (`RAID`, `SPORTS`, `LCFC*`).
-- **Archived projects** are marked by a `zarchive ` name prefix — the mapping should exclude them from active views by default.
-- **Project categories already exist** and are a real signal: `Productivity`, and notably **`Write Off` — "Unproductive time worked on client account"**. That is an existing time-tracking concept in the org and should inform the time slice rather than being reinvented.
-- **DB internal work already has Jira projects** — `DBADMIN`, `DBBUSINESS`, `DBHD`, `DBIMPROVE`, `DDSSO`, `CTT`, `PO` (Project/Staff Oversight). These map to bucket 2 (**DB WORK**), giving the three-bucket hierarchy a real Jira backing.
-- `DBOOO` (DB Out of Office) and `DBSTAFF` exist — relevant when the parked People/Who's Off work resumes.
+### 7.5 ⭐ Tempo Accounts — the real mapping layer (VERIFIED)
 
-**Still to verify:** whether Jira *accounts* (Tempo-style, for time logging) exist separately from projects/categories, and which board within `ETB` is the active one for Slice 1.
+**This supersedes any project-based mapping.** Tempo is installed (worklogs are authored by *"Timesheets by Tempo – Jira Time Tracking"*), and the Tempo **Account** field is exposed on every issue as **`customfield_10030`** ("Account"). Its structure, read directly from live issues:
+
+```
+Issue → Account → { customer, category }
+```
+
+Example, from `ETB-1103`:
+```json
+"customfield_10030": {
+  "value": "ETB",
+  "optionProperties": {
+    "key": "ETB", "id": 6, "status": "OPEN",
+    "customer": { "name": "ETB", "key": "ETB", "id": 3 },
+    "category": { "name": "Billable", "id": 2 }
+  }
+}
+```
+
+**Accounts observed (sampled, not exhaustive):**
+
+| Account | Customer | Category |
+|---|---|---|
+| ETB | **ETB** | Billable |
+| PBF | **Novuna** | Billable |
+| LCFC | — | Billable |
+| LCFC Support | — | **Write off** |
+| Trade | — | Billable |
+| Sports | — | R&D |
+| DB | — | Admin |
+| DB Improvements | — | DB Improvements |
+
+**Three findings that change the design:**
+
+1. **`Customer` is the client identity — not the Jira project.** `PBFIF` and `PBFST` both carry Account **PBF** → Customer **Novuna**. So the ~60 `PBF*` projects roll up to Novuna via one account, exactly as expected. **The client switcher should be driven by Tempo Customer/Account, not by Jira project.**
+
+2. **`Category` already *is* the three-bucket hierarchy.** The org has been classifying time this way all along:
+   - `Billable`, `Write off` → **CLIENT WORK** (bucket 1)
+   - `Admin`, `DB Improvements`, `R&D` → **DB WORK** (bucket 2)
+
+   This is a large de-risk: we adopt an existing, trusted vocabulary instead of inventing one, and finance already reconciles against it.
+
+3. **Project ≠ client, empirically.** Counter-examples found in live data:
+   - The `DBIMPROVE` project contains an issue booked to the **ETB** account (billable client work inside an internal project).
+   - The `SPORTS` project spans **Sports** (R&D) *and* **LCFC Support** (Write off).
+   - `LCFCSUB` spans **LCFC** (Billable) and **LCFC Support** (Write off).
+
+   Any project→client mapping would have mis-filed all of these. **Account is the unit; project is not.**
+
+**Also observed:** many issues have **no account set** (e.g. 22 of 49 sampled `LCFCSUB` issues). The **Unassigned** lane (§1) is therefore not hypothetical — it needs to exist on day one.
+
+**Archived ≠ irrelevant:** `zarchive `-prefixed projects still carry historic time against real accounts. Exclude them from *active boards*, but never from *account roll-ups*.
+
+**Still to verify:** the complete account list (sampling only revealed the accounts on recently-updated issues — a full sweep needs the Tempo Accounts API at `api.tempo.io`, which requires its own token), and which board within `ETB` is the active one for Slice 1.
+
+### 7.6 Jira projects — supporting detail
+- **137 projects.** Prefix families: `PBF*` (~60), `S7*`/`SLD7`/`SPORTS`, `ETB*`, `TR*`, `SR*`, `DB*`.
+- **DB internal projects** — `DBADMIN`, `DBBUSINESS`, `DBHD`, `DBIMPROVE`, `DDSSO`, `CTT`, `PO`.
+- `DBOOO` (DB Out of Office) and `DBSTAFF` exist — relevant when the parked People/Who's Off work resumes.
+- Worklogs are readable through the **standard Jira worklog API** (confirmed on `ETB-1103`), so the future timer slice may not need the Tempo API to *write* time — to be validated.
 
 ---
 
