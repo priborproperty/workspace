@@ -1,8 +1,10 @@
-# PRD — DBWorks Client Workspace (working draft, v8)
+# PRD — DBWorks Client Workspace (working draft, v9)
 
-**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v8
+**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v9
 **One-liner:** A workspace at `workspace.digitalboutique.co.uk` where each **client is a Project**. Opening a client (e.g. **ETB**) shows that client's **Jira board + issues** next to its **Slack channels**. Everything that happens rolls up to a single top-down question: **is this client work, DB work, or personal?** — which is also what makes time triage possible later.
 
+> **v9 changes:** Adds the **environment & access model** (§13): two Laravel Cloud organizations — the existing `Digital Boutique` as the dev/staging boundary, and a new `DB Workspace` holding production with restricted membership. Clarifies repo locations (the Laravel app is **GitLab-only**; the GitHub repo holds specs).
+>
 > **v8 changes:** **The Laravel repo has been read** (§12). Foundation is Laravel 12 + **Filament 5** on Sail. Large parts of this PRD already exist: Google SSO, **Google Workspace staff sync**, a **JiraClient** contract, **Filament Shield RBAC**, and a complete **Who's Off / leave module**. Slice 1 restated against the real codebase and its conventions.
 >
 > **v7 changes:** **Tempo Accounts found and verified** (§7.5) — `customfield_10030` exposes Account → {customer, category}. PBF → customer **Novuna**; account `Category` (Billable / Write off / Admin / R&D) already *is* the three-bucket hierarchy. Live counter-examples prove **project ≠ client**, so the client switcher must be driven by Account/Customer, not Jira project.
@@ -319,7 +321,42 @@ Business logic lives outside Filament, in single-purpose classes:
 
 ---
 
-## 13. Repo / tooling
+## 13. Environments & access model (DECIDED)
+
+Per-environment RBAC in Laravel Cloud requires Advanced RBAC (Business/Enterprise). Rather than pay for it, **organization membership is the access boundary** — non-membership is the only true "no access", since even the `Viewer` role can read environment variables.
+
+### 13.1 Two Laravel Cloud organizations
+
+| Org | Purpose | Members |
+|---|---|---|
+| **Digital Boutique** *(existing)* | **Sandbox / staging.** Devs work here against a copy. | Devs, incl. Drew (Admin today) |
+| **DB Workspace** *(new)* | **Production.** | Alistair only at first; **Gary added as second Admin** once the system is mission-critical, for disaster recovery |
+
+**Working model:** devs build and test against staging in `Digital Boutique`; Alistair pulls, commits, and promotes to production in `DB Workspace`. Devs have no path to production credentials because they are not members of that org.
+
+This is the practical resolution of the developer-access concern that has run through this PRD: it is enforced by org boundaries rather than by roles, and costs nothing.
+
+**Note on Gary as second Admin:** Admin can read every secret in the org — there is no break-glass-only role. This is an accepted, deliberate trade for disaster recovery, not an oversight.
+
+### 13.2 ⚠️ The dependency this model rests on
+
+**Staging must not contain real production data.** The whole separation collapses if a production database dump is loaded into the sandbox org — devs would then read real client communications and real HR data from staging, exactly the outcome the split exists to prevent.
+
+A sanitised/seeded dataset is therefore **not optional** under this model; it is what makes it work. The codebase already has the raw materials (`DemoSeeder`, `people:reset`), so this is a matter of discipline and a documented rule rather than new engineering.
+
+### 13.3 First-admin bootstrap — accepted risk
+
+`PEOPLE_ADMIN_EMAILS` is deliberately **not** being set. The first user to sign in becomes `super_admin`; only Alistair will know the deployed URL initially and will sign in first. Risk accepted knowingly.
+
+### 13.4 Open — one app or two?
+
+**Preference is a single unified app.** The tension is that the People/HR data and the client-workspace data have different audiences and different sensitivity, which pulls toward separate permissions and possibly separate databases. It is possible People/HR later moves to its own deployment.
+
+**Not being decided now** — the two-org split above buys time, because production is restricted regardless of how the app is eventually partitioned.
+
+---
+
+## 14. Repo / tooling
 
 ### Repos (kept deliberately separate)
 | Repo | Contents | Access |
@@ -343,5 +380,5 @@ Business logic lives outside Filament, in single-purpose classes:
 
 ---
 
-## 14. Success signal (Slice 1)
+## 15. Success signal (Slice 1)
 Alistair opens ETB in the workspace instead of switching between Jira and Slack: the live board is there, issues open with their comments, and the ETB channels sit beside them — small enough to have shipped, useful enough to keep using.
