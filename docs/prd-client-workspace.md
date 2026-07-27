@@ -1,8 +1,10 @@
-# PRD — DBWorks Client Workspace (working draft, v9)
+# PRD — DBWorks Client Workspace (working draft, v10)
 
-**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v9
+**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v10
 **One-liner:** A workspace at `workspace.digitalboutique.co.uk` where each **client is a Project**. Opening a client (e.g. **ETB**) shows that client's **Jira board + issues** next to its **Slack channels**. Everything that happens rolls up to a single top-down question: **is this client work, DB work, or personal?** — which is also what makes time triage possible later.
 
+> **v10 changes:** Source control stays on **GitLab** (no mirror). Adds §13.5 — the org split protects credentials but not the deploy trigger; production auto-deploy must be off and the production branch protected.
+>
 > **v9 changes:** Adds the **environment & access model** (§13): two Laravel Cloud organizations — the existing `Digital Boutique` as the dev/staging boundary, and a new `DB Workspace` holding production with restricted membership. Clarifies repo locations (the Laravel app is **GitLab-only**; the GitHub repo holds specs).
 >
 > **v8 changes:** **The Laravel repo has been read** (§12). Foundation is Laravel 12 + **Filament 5** on Sail. Large parts of this PRD already exist: Google SSO, **Google Workspace staff sync**, a **JiraClient** contract, **Filament Shield RBAC**, and a complete **Who's Off / leave module**. Slice 1 restated against the real codebase and its conventions.
@@ -347,6 +349,21 @@ A sanitised/seeded dataset is therefore **not optional** under this model; it is
 ### 13.3 First-admin bootstrap — accepted risk
 
 `PEOPLE_ADMIN_EMAILS` is deliberately **not** being set. The first user to sign in becomes `super_admin`; only Alistair will know the deployed URL initially and will sign in first. Risk accepted knowingly.
+
+### 13.5 Deploy control — the gap the org split does not close
+
+**Decision: source control stays on GitLab.** The code lives there, devs already work there, and no mirror is introduced. Both Laravel Cloud organizations connect to that same repository.
+
+**The gap:** organization membership controls *credentials*, not the *deploy trigger*. The production environment in `DB Workspace` watches a branch in the shared repo, so a developer with push access to that branch can cause a production deploy without ever being a member of the production org or seeing its secrets.
+
+**Two controls, both required:**
+
+1. **Disable auto-deploy on production.** Deploys become a manual action in the Laravel Cloud dashboard, and only members of `DB Workspace` can trigger them. This is the stronger control and sits entirely with Alistair.
+2. **Protect the production branch in GitLab** (*Settings → Repository → Protected branches*): `main` restricted to Maintainers for push and merge. Devs work on `dev` and `DBIMPROVE-###` branches; promotion to `main` is Alistair's.
+
+With both in place: devs own `dev` → staging; Alistair owns `main` → production.
+
+**Residual, accepted:** a migration merged to `main` runs against production data, with Alistair as the only reviewer in front of it. Acceptable at current team size; revisit as the team grows.
 
 ### 13.4 Open — one app or two?
 
