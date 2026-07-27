@@ -1,11 +1,11 @@
-# PRD — DBWorks Client Workspace (working draft, v4)
+# PRD — DBWorks Client Workspace (working draft, v5)
 
 **Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v5
 **One-liner:** A workspace at `workspace.digitalboutique.co.uk` where each **client is a Project**. Opening a client (e.g. **ETB**) shows that client's **Jira board + issues** next to its **Slack channels**. Everything that happens rolls up to a single top-down question: **is this client work, DB work, or personal?** — which is also what makes time triage possible later.
 
-> **v4 changes:** Slice 1 trimmed to the smaller bite — **Jira read-only + Slack channels**. DMs deferred. Adds the **three-bucket hierarchy**, the **comms convention** (channels/threads over DMs), **partner** handling, and the **time-triage** end goal with its trust guardrail.
+> **v5 changes:** Confirms Jira Cloud, Google Workspace as the staff source of truth, and the private spec repo. Adds **directory sync** (§7) — pull staff from Google Workspace, users + public channels from Slack — and a **mapping page** where channels and external domains get bucketed. Notes that Jira maps **client → account** (ETB single, Navuna multi-space). Replaces open questions with an **outstanding-items ledger** (§9).
 >
-> **Repo caveat:** the assistant cannot read the GitLab repo (`digitalboutique/internalprojects/people`) in this session. Items tagged _[verify]_ need checking against code.
+> **Repo caveat:** Claude cannot yet read the GitLab repo (`digitalboutique/internalprojects/people`). Items tagged _[verify]_ need checking against code once the push-mirror in §12 is live.
 
 ---
 
