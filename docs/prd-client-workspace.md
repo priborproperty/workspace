@@ -1,15 +1,17 @@
-# PRD — DBWorks Client Workspace (working draft, v7)
+# PRD — DBWorks Client Workspace (working draft, v8)
 
-**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v7
+**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v8
 **One-liner:** A workspace at `workspace.digitalboutique.co.uk` where each **client is a Project**. Opening a client (e.g. **ETB**) shows that client's **Jira board + issues** next to its **Slack channels**. Everything that happens rolls up to a single top-down question: **is this client work, DB work, or personal?** — which is also what makes time triage possible later.
 
+> **v8 changes:** **The Laravel repo has been read** (§12). Foundation is Laravel 12 + **Filament 5** on Sail. Large parts of this PRD already exist: Google SSO, **Google Workspace staff sync**, a **JiraClient** contract, **Filament Shield RBAC**, and a complete **Who's Off / leave module**. Slice 1 restated against the real codebase and its conventions.
+>
 > **v7 changes:** **Tempo Accounts found and verified** (§7.5) — `customfield_10030` exposes Account → {customer, category}. PBF → customer **Novuna**; account `Category` (Billable / Write off / Admin / R&D) already *is* the three-bucket hierarchy. Live counter-examples prove **project ≠ client**, so the client switcher must be driven by Account/Customer, not Jira project.
 >
 > **v6 changes:** Jira verified directly against `dbhq.atlassian.net` via the now-live Atlassian connector — 137 projects, clients span many projects each, existing `Write Off` category, DB-internal projects already present (§7.4). Client name corrected to **Novuna**. Jira access removed from the blocking list.
 >
 > **v5 changes:** Confirms Jira Cloud, Google Workspace as the staff source of truth, and the private spec repo. Adds **directory sync** (§7) — pull staff from Google Workspace, users + public channels from Slack — and a **mapping page** where channels and external domains get bucketed. Notes that Jira maps **client → account** (ETB single, Navuna multi-space). Replaces open questions with an **outstanding-items ledger** (§9).
 >
-> **Repo caveat:** Claude cannot yet read the GitLab repo (`digitalboutique/internalprojects/people`). Items tagged _[verify]_ need checking against code once the push-mirror in §12 is live.
+> **Repo access:** resolved — the GitLab repo has been cloned and read. Findings in §12.
 
 ---
 
@@ -42,7 +44,7 @@ A client's reality is split across Jira and Slack, and there's no single "ETB" s
 
 | Decision | Choice |
 |---|---|
-| Foundation | Extend existing Laravel app; reuse Google SSO _[verify]_ |
+| Foundation | **Laravel 12 · PHP 8.4 · Filament 5 · Sail/Docker · MySQL 8.4 · Redis · Horizon** (verified, §12) |
 | **Jira** | **Jira Cloud** (confirmed) |
 | Identity source of truth | **Google Workspace** — a Google Workspace account *is* what makes you staff |
 | Spec/app repo | `priborproperty/workspace` — **private, Alistair-only** (confirmed) |
@@ -229,11 +231,11 @@ Running list of what's still needed. **Not questions to answer now** — the led
 ### Owed by Alistair (blocking, in priority order)
 | # | Item | Blocks |
 |---|---|---|
-| 1 | **GitLab access to the Laravel app** — via push-mirror to a private GitHub repo (see §12) | Everything code-related; resolves all `[verify]` tags |
-| 2 | **Slack app** with narrow scopes (`channels:read`, `channels:history`, `users:read`) | Slice 1 Slack panel |
-| 3 | Google Workspace **Directory API** access (service account or admin consent) | Staff sync (§7.1) |
+| 1 | **Slack app** with narrow scopes (`channels:read`, `channels:history`, `users:read`) | Slice 1 Slack panel |
+| 2 | **Jira API token** for the app itself (`JIRA_BASE_URL`, `JIRA_USER_EMAIL`, `JIRA_API_TOKEN`) — Claude has connector access, but the *app* has none | Slice 1 Jira panel going live |
+| 3 | Google **service account** with domain-wide delegation | Activates the already-built staff sync |
 
-**Resolved:** ~~Jira access~~ — the **Atlassian connector is live** with read + write scopes on `dbhq.atlassian.net`. No API token needed. Jira structure verified directly (§7.4).
+**Resolved:** ~~GitLab repo access~~ — cloned and read (§12). ~~Jira discovery~~ — the **Atlassian connector is live** with read + write scopes on `dbhq.atlassian.net`. No API token needed. Jira structure verified directly (§7.4).
 
 ### To resolve during build (not blocking now)
 - **Jira account/category structure** — confirm real shape for ETB (single) vs Navuna (multi-space); experiment when we reach time logging.
@@ -265,7 +267,59 @@ Running list of what's still needed. **Not questions to answer now** — the led
 
 ---
 
-## 12. Repo / tooling
+## 12. ⭐ The existing codebase (VERIFIED — read 2026-07-27)
+
+Cloned from `gitlab.com/digitalboutique/internalprojects/people`. **Default branch is `dev`** (not `main`); feature branches follow `DBIMPROVE-###` and merge into `dev` — the same key as the `DBIMPROVE` Jira project.
+
+### 12.1 Stack
+PHP 8.4 · Laravel 12 · **Filament 5** (panel at `/admin`) · Laravel Sail (Docker) · MySQL 8.4 · Redis · Horizon (`/horizon`) · Filament Spotlight (`Cmd/Ctrl+K`) · Socialite · **Filament Shield** (RBAC).
+
+### 12.2 Already built — do not rebuild
+
+| PRD item | Status in the codebase |
+|---|---|
+| **Google SSO** | **Built and live.** Socialite + `GoogleAuthController` + `UpsertGoogleUser`. Latest commit: *"Restrict admin panel login to Google SSO only"*. Domain-restricted via `AllowedDomain` allowlist. |
+| **Staff sync from Google Workspace** (§7.1) | **Built, dormant.** `StaffDirectory` contract, `GoogleWorkspaceDirectory`, `SyncStaffFromDirectory` action, "Sync from Google" button. Needs only a domain-wide-delegated service account. |
+| **RBAC** | **Built.** Filament Shield + Spatie roles (`super_admin`, `panel_user`), one `Policy` per model. |
+| **Who's Off / leave** *(the "parked" People slice)* | **Built.** `WhosOffQuery`, `LeaveRequest`, `LeaveAllowance`, `LeaveDayCalculator`, `RequestLeave`/`ApproveLeave` actions, `DayPortion`/`LeaveStatus` enums, bank-holiday sync, half-days, per-person working patterns. |
+| **Jira client** | **Built but narrow.** `JiraClient` contract + `HttpJiraClient`/`NullJiraClient`. Only does `createLearningSubtask()` and `issueUrl()`. Config keys already exist: `JIRA_BASE_URL`, `JIRA_USER_EMAIL`, `JIRA_API_TOKEN`. |
+| **Settings layer** | **Built.** `PortalSettings` reads the `settings` table with `config/people.php` fallback; admins edit live in *Configuration → Settings*. Ideal home for the client/channel/domain maps. |
+| **Slack config stub** | Partial. `config/services.php` already has `slack.notifications.bot_user_oauth_token`. |
+
+**Correction to earlier revisions:** Who's Off was parked as future work — it is in fact **already built**. Any People work is *extension*, not greenfield.
+
+### 12.3 Architecture — where new code goes
+
+Business logic lives outside Filament, in single-purpose classes:
+
+| Layer | Purpose | Where the workspace lands |
+|---|---|---|
+| `Actions/` | One class per write op | `Actions/Workspace/MapChannelToClient`, `…/StartTimer` |
+| `Queries/` | Read-side/reporting | `Queries/ClientBoardQuery`, `ClientFeedQuery` |
+| `Data/` | DTOs between layers | `Data/ClientFeedItem`, `Data/BoardColumn` |
+| `Contracts/` + `Services/` | Integrations, each with a real **and** a `Null*` implementation bound in `AppServiceProvider` | `Contracts/SlackClient` + `Services/Slack/{Http,Null}SlackClient` |
+| `Support/` | Framework-agnostic helpers | routing/bucketing rules |
+| `Filament/` | Resources, Pages, Widgets — **thin**, delegates to Actions/Queries | the client workspace UI |
+| `Policies/` | One per model, drives Shield authorization | client-scoped access |
+
+**The null-implementation pattern is the key idiom:** bindings are chosen at boot from whether config is filled in; when credentials are absent the null implementation binds and the UI hides itself. **Slack must follow this exactly** — it means Slice 1 can merge before the Slack app exists.
+
+### 12.4 Conventions to follow
+- `declare(strict_types=1);` in every PHP file; classes `final` by default (enforced by Pint).
+- Pint `psr12` + project rules; **PHPStan/Larastan level 6** over `app/`.
+- Commit subjects imperative, **under 72 chars**, no trailing full stop.
+- Tests: PHPUnit against **in-memory SQLite**, array cache, sync queue — the Feature suite needs no containers. `composer quality` = lint + analyse.
+
+### 12.5 Open questions raised *by* the code
+
+1. **Filament vs custom UI — the biggest architectural decision.** Filament 5 is an admin-CRUD framework; it excels at tables/forms and gives RBAC, auth and navigation free. But a **Jira board and a Slack feed are not CRUD**. Options: (a) custom Filament **Pages** with Livewire/Blade — stays in one app, inherits auth/RBAC, but fights the grain; (b) a separate front-end against a Laravel API — free UI hand, duplicates auth/RBAC. **Recommendation: (a)**, because Slice 1 is read-only panels and the auth/RBAC reuse is worth more than UI freedom at this stage.
+2. **`JiraClient` needs widening** — from one sub-task method to boards, issue search, issue detail, and (later) worklogs + the Tempo Account field `customfield_10030` (§7.5).
+3. **Deploy target is contradictory.** `docs/roadmap.md` says *"No deploy target is chosen… current preference is Render"*, but Laravel Cloud is in use (there's a *"script to import a database dump from Laravel Cloud"* commit) and was stated as the platform. **The roadmap doc is stale — confirm Laravel Cloud and correct it.**
+4. **Client-data sandbox rule (§11)** — the app has no client comms today. Decide before Slack lands, not after.
+
+---
+
+## 13. Repo / tooling
 
 ### Repos (kept deliberately separate)
 | Repo | Contents | Access |
@@ -289,5 +343,5 @@ Running list of what's still needed. **Not questions to answer now** — the led
 
 ---
 
-## 13. Success signal (Slice 1)
+## 14. Success signal (Slice 1)
 Alistair opens ETB in the workspace instead of switching between Jira and Slack: the live board is there, issues open with their comments, and the ETB channels sit beside them — small enough to have shipped, useful enough to keep using.
