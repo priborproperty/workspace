@@ -1,8 +1,10 @@
-# PRD — DBWorks Client Workspace (working draft, v11)
+# PRD — DBWorks Client Workspace (working draft, v12)
 
-**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v11
+**Status:** Draft for review · **Owner:** Alistair · **Date:** 2026-07-27 · **Rev:** v12
 **One-liner:** A workspace at `workspace.digitalboutique.co.uk` where each **client is a Project**. Opening a client (e.g. **ETB**) shows that client's **Jira board + issues** next to its **Slack channels**. Everything that happens rolls up to a single top-down question: **is this client work, DB work, or personal?** — which is also what makes time triage possible later.
 
+> **v12 changes:** **Slice 0 replaces the read-only board as the first build** (§5): account tabs, context switching, a timer, and a plain issue list — built and run locally on Sail before deploying. The Jira board is explicitly dropped from the first slice.
+>
 > **v11 changes:** Adds **§3 — product owner requirements**, which reframes the product. The portal is not an aggregator but a **workflow layer with guardrails**: single front door, enforced quality gates on Jira issues, a deliberate context switcher that starts the timer and compartmentalises the view, a structured blocked/escalation signal, and calendar time-boxing that reconciles to Tempo. Slices need revisiting against this.
 >
 > **v10 changes:** Source control stays on **GitLab** (no mirror). Adds §14.5 — the org split protects credentials but not the deploy trigger; production auto-deploy must be off and the production branch protected.
@@ -131,8 +133,8 @@ The centre of gravity moves from *reading* to *doing*:
 | **Jira** | **Jira Cloud** (confirmed) |
 | Identity source of truth | **Google Workspace** — a Google Workspace account *is* what makes you staff |
 | Spec/app repo | `priborproperty/workspace` — **private, Alistair-only** (confirmed) |
-| **Slice 1** | **Jira read-only (board + issue detail) + Slack channels for one client (ETB)** |
-| Jira depth v1 | **Read-only.** Comment / transition / assign is Slice 2 |
+| **First build** | **Slice 0 (§5): account tabs + context switch + timer + plain issue list, local on Sail.** The read-only board slice is superseded |
+| Jira depth v1 | **Read-only.** No board in Slice 0 — a plain issue list only |
 | Slack v1 | **Channels only.** DMs deferred to a later slice |
 | Routing pass 1 | Jira: **issue → Tempo Account → Customer** (verified). Slack: channel → client (explicit map). Email: external contact → client (by **email domain**) |
 | Partners | Corfinity, Akuvu etc. are **partners**, not clients — routed by **channel**, never by domain |
@@ -141,26 +143,52 @@ The centre of gravity moves from *reading* to *doing*:
 
 ---
 
-## 5. Slice 1 — the ETB page (BUILD FIRST)
+## 5. Slice 0 — account tabs and the timer (BUILD FIRST)
 
-Deliberately the smaller bite. Ship it, get traction, then iterate.
+**Supersedes the earlier "read-only ETB page" slice**, which was written before §3. That slice was largely the part Claude already does well; this one is the part it structurally cannot do.
 
-### 5.1 Scope
-- **Project switcher:** ETB, Novuna, Digital Boutique, Personal.
-- **Jira panel (read-only):** the ETB board rendered as status columns with issue cards; click a card → issue detail (summary, description, status, assignee, comments). _[verify: Cloud vs Server/DC; which board = ETB]_
-- **Slack panel (channels only):** ETB's mapped channels, recent threads readable inline.
-- **Channel→client mapping UI** + a **dry-run tester** (paste a channel name → shows which bucket/client it lands in).
+**Built and run locally on Sail first.** Laravel Cloud remains the target, and nothing here diverges from it — same app, same migrations, same code path. Push to `dev` regularly so staging does not go stale.
 
-### 5.2 Acceptance criteria
-- Selecting ETB shows the live ETB board by status; opening an issue shows its real detail and comments.
-- ETB's mapped channels appear with readable threads; no other client's traffic bleeds in.
-- An unmapped channel appears in **Unassigned**, not mis-filed.
-- Deploys to a Laravel Cloud preview environment.
+### 5.1 What it is
+
+A single page with a **tab bar of Tempo accounts**. Selecting a tab switches context and starts a timer against that account.
+
+Tabs are the real accounts (§8.5): `ETB` · `PBF (Novuna)` · `LCFC` · `Trade` · `Sports` · `DB` · `DB Improvements`.
+
+**Tabs rather than the dropdown of §3.3.** The concern in §3.3 was accidental drift between *browser* tabs; in-app tabs are explicit. For a running timer, **always-visible current context beats deliberate friction** — a dropdown hides which account you are on until you open it. Recorded as a conscious reversal, not drift.
+
+### 5.2 Scope
+
+1. **Accounts** — a table seeded with the known accounts. **No sync in this slice**; the list is short and known.
+2. **Tab bar** — one tab per account, current one clearly active.
+3. **Context switch starts a timer** — a `TimeEntry` (account, started_at, ended_at). Switching closes the open entry and opens a new one.
+4. **Per-tab issue list** — that account's open Jira issues as a **plain list, not a board**, via JQL on `customfield_10030`.
+5. **Today's tally** — hours per account so far today.
 
 ### 5.3 Explicitly out
-Jira writes, Slack DMs, email, timers, Jira worklogs, Claude co-work.
 
----
+The **Jira board** (biggest build, least differentiated, Jira does it better) · Slack · email · calendar · Tempo write-back · quality gates · blocked signal · multi-user. All additive once the loop exists.
+
+### 5.4 Why this scope
+
+It proves the whole proposition end-to-end — **switch context → time accrues → time is attributable to a real account** — and it is precisely what failed as prompt **D3** in the [prompt library](prompt-library.md). One week of real use answers the question the PRD cannot: does deliberate context switching feel natural or like a chore? If it is a chore, that is learned cheaply, before anything larger is built on top.
+
+### 5.5 Implementation notes
+
+Follow the existing architecture (§13.3) and standards (§13.4) — `declare(strict_types=1)`, final classes, Pint `psr12`, PHPStan level 6, tests against in-memory SQLite.
+
+- **Widen `JiraClient`** with one method: issues for an account. Extend the contract, implement in `HttpJiraClient`, no-op in `NullJiraClient`, so it degrades cleanly when unconfigured — the existing idiom.
+- `Queries/AccountIssuesQuery` — read side.
+- `Actions/Workspace/SwitchContext` — closes the open `TimeEntry`, opens the next.
+- `TimeEntry` model + migration; `Account` model + seeder.
+- One custom Filament **Page** for the workspace surface.
+
+### 5.6 Acceptance criteria
+
+- Switching tabs closes the previous time entry and opens a new one, with no gaps or overlaps.
+- Each tab lists that account's open Jira issues; an unconfigured Jira degrades to an empty state rather than an error.
+- Today's tally reconciles against the raw `time_entries` rows.
+- `composer quality` passes; the loop is covered by feature tests.
 
 ## 6. Comms convention — designing the mess away
 
