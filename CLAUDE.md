@@ -1,5 +1,14 @@
 # Working preferences — Alistair
 
+## 0. Canonical links live in [`LINKS.md`](LINKS.md)
+
+**Read `LINKS.md` before handing anyone a URL.** It holds the correct, current
+links for the DB Staff Portal, Jira, Laravel Cloud, Claude connectors, Google
+OAuth and GitLab — plus the exact list to hand a developer being onboarded.
+
+When a link changes, or a new system is introduced, **update `LINKS.md` first**
+so there is one source of truth rather than links scattered through documents.
+
 ## 1. Always give a URL, never breadcrumbs
 
 **Never** write navigation paths like "Settings → Repository → expand Deploy tokens".
